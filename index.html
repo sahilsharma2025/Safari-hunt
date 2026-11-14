@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Safari Hunt</title>
+<style>
+  html,body{margin:0;height:100%;background:#111;overflow:hidden;touch-action:none}
+  #game{width:100vw;height:100vh}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.80.1/phaser.min.js"></script>
+</head>
+<body>
+<div id="game"></div>
+<script>
+const W = 960, H = 540, FONT = 'Trebuchet MS, Arial, sans-serif';
+const AMMO_MAX = 6, RELOAD_SEC = 1.2;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+let muted = store.get('safari_muted', '0') === '1';
+let ac;
+function beep(f, d = 0.1, type = 'square', v = 0.05) {
+  if (muted) return;
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = f; g.gain.value = v;
+    o.connect(g); g.connect(ac.destination); o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + d);
+    o.stop(ac.currentTime + d);
+  } catch (e) {}
+}
+function btn(s, x, y, label, cb, color = '#2e7d32', size = 28) {
+  return s.add.text(x, y, label, { fontFamily: FONT, fontSize: size + 'px', color: '#fff', backgroundColor: color, padding: { x: 22, y: 10 } })
+    .setOrigin(0.5).setDepth(50).setInteractive({ useHandCursor: true })
+    .on('pointerdown', () => { beep(520, 0.08); cb(); });
+}
+function soundBtn(s, x, y) {
+  const t = btn(s, x, y, muted ? '🔇' : '🔊', () => {
+    muted = !muted; store.set('safari_muted', muted ? '1' : '0'); t.setText(muted ? '🔇' : '🔊');
+  }, '#455a64', 24);
+  return t;
+}
+function addBg(s) {
+  s.add.image(0, 0, 'sky').setOrigin(0);
+  return {
+    far: s.add.tileSprite(0, 0, W, H, 'far').setOrigin(0),
+    near: s.add.tileSprite(0, 0, W, H, 'near').setOrigin(0),
+    trees: s.add.tileSprite(0, 0, W, H, 'trees').setOrigin(0)
+  };
+}
+
+class Boot extends Phaser.Scene {
+  constructor() { super('Boot'); }
+  create() {
+    const g = this.make.graphics({ x: 0, y: 0, add: false });
+    const tex = (k, w, h) => { g.generateTexture(k, w, h); g.clear(); };
+    g.fillGradientStyle(0x7ec8f0, 0x7ec8f0, 0xe3f6ff, 0xe3f6ff, 1); g.fillRect(0, 0, W, H); tex('sky', W, H);
+    const hills = (color, base, amp, waves, ph) => {
+      g.fillStyle(color); g.beginPath(); g.moveTo(0, H);
+      for (let x = 0; x <= W; x += 10) g.lineTo(x, base + amp * Math.sin(x / W * Math.PI * 2 * waves + ph));
+      g.lineTo(W, H); g.closePath(); g.fillPath();
+    };
+    hills(0x86c183, 290, 35, 2, 0); tex('far', W, H);
+    hills(0x4f9a54, 350, 25, 3, 1); tex('near', W, H);
+    g.fillStyle(0x3f7d3a); g.fillRect(0, 470, W, 70);
+    for (let i = 0; i < 8; i++) {
+      const x = 60 + i * 120;
+      g.fillStyle(0x6d4c2f); g.fillRect(x - 8, 400, 16, 75);
+      g.fillStyle(0x2e7d32); g.fillTriangle(x - 48, 430, x + 48, 430, x, 320);
+      g.fillStyle(0x388e3c); g.fillTriangle(x - 40, 385, x + 40, 385, x, 290);
+    }
+    tex('trees', W, H);
+    // deer
+    g.fillStyle(0x8a5a2b); g.fillRect(22, 48, 8, 22); g.fillRect(34, 48, 8, 22); g.fillRect(58, 48, 8, 22); g.fillRect(70, 48, 8, 22);
+    g.fillStyle(0x9c6b3c); g.fillEllipse(48, 42, 64, 32); g.fillRect(68, 18, 12, 28); g.fillCircle(78, 18, 11);
+    g.fillStyle(0xf2e0c4); g.fillEllipse(30, 46, 16, 12);
+    g.fillStyle(0x000000); g.fillCircle(81, 16, 2);
+    g.lineStyle(3, 0x5a3a1c); g.lineBetween(76, 8, 72, -2 + 2); g.lineBetween(76, 8, 84, 0); g.lineBetween(80, 8, 90, 2);
+    tex('deer', 96, 72);
+    // rabbit
+    g.fillStyle(0xf1f1f1); g.fillEllipse(24, 36, 38, 26); g.fillCircle(40, 27, 10);
+    g.fillEllipse(38, 9, 7, 20); g.fillEllipse(46, 11, 7, 18);
+    g.fillStyle(0xf4a6b8); g.fillEllipse(38, 10, 3, 12);
+    g.fillStyle(0xffffff); g.fillCircle(8, 34, 5);
+    g.fillStyle(0x000000); g.fillCircle(44, 25, 2);
+    tex('rabbit', 54, 52);
+    // bird
+    g.fillStyle(0x3b8ee0); g.fillEllipse(24, 20, 36, 22); g.fillCircle(40, 14, 9);
+    g.fillStyle(0x2a6db0); g.fillEllipse(20, 15, 20, 12); g.fillTriangle(6, 18, -4, 12, -4, 26);
+    g.fillStyle(0xffc107); g.fillTriangle(47, 12, 58, 16, 47, 20);
+    g.fillStyle(0x000000); g.fillCircle(42, 12, 2);
+    tex('bird', 60, 40);
+    // crosshair
+    g.lineStyle(3, 0xff3d3d); g.strokeCircle(24, 24, 16); g.lineBetween(24, 2, 24, 14); g.lineBetween(24, 34, 24, 46);
+    g.lineBetween(2, 24, 14, 24); g.lineBetween(34, 24, 46, 24); tex('cross', 48, 48);
+    g.fillStyle(0xffe53b); g.fillCircle(5, 5, 5); tex('spark', 10, 10);
+    this.scene.start('Menu');
+  }
+}
+
+class Menu extends Phaser.Scene {
+  constructor() { super('Menu'); }
+  create() {
+    this.input.setDefaultCursor('default');
+    addBg(this);
+    this.add.text(W / 2, 120, 'SAFARI HUNT', { fontFamily: FONT, fontSize: '76px', fontStyle: 'bold', color: '#fff', stroke: '#2e5d34', strokeThickness: 10 }).setOrigin(0.5);
+    this.add.text(W / 2, 195, 'Friendly cartoon target game', { fontFamily: FONT, fontSize: '26px', color: '#1b3a1f' }).setOrigin(0.5);
+    btn(this, W / 2, 290, '▶  PLAY', () => this.scene.start('Game', { level: 1, score: 0 }), '#2e7d32', 40);
+    this.add.text(W / 2, 370, 'High score: ' + store.get('safari_hi', '0'), { fontFamily: FONT, fontSize: '28px', color: '#fff', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5);
+    this.add.text(W / 2, 430, 'Aim with mouse / finger. Click or tap to shoot. R = reload, P = pause.', { fontFamily: FONT, fontSize: '20px', color: '#12301a' }).setOrigin(0.5);
+    soundBtn(this, W - 50, 40);
+  }
+}
+
+const KINDS = [
+  { key: 'deer', speed: 120, pts: 10, w: 0.4 },
+  { key: 'rabbit', speed: 190, pts: 20, w: 0.35 },
+  { key: 'bird', speed: 250, pts: 30, w: 0.25 }
+];
+
+class Game extends Phaser.Scene {
+  constructor() { super('Game'); }
+  init(d) { this.level = d.level || 1; this.score = d.score || 0; }
+  create() {
+    this.input.setDefaultCursor('none');
+    this.events.once('shutdown', () => this.input.setDefaultCursor('default'));
+    this.bg = addBg(this);
+    this.mult = 1 + 0.25 * (this.level - 1);
+    this.timeLeft = Math.max(25, 65 - this.level * 5);
+    this.target = this.score + 60 + this.level * 40;
+    this.ammo = AMMO_MAX; this.reloading = false; this.reloadT = 0;
+    this.paused = false; this.ending = false; this.animals = []; this.spawnT = 0.3;
+
+    const st = { fontFamily: FONT, fontSize: '26px', color: '#fff', stroke: '#000', strokeThickness: 5 };
+    this.hud = this.add.text(16, 12, '', st).setDepth(40);
+    this.timeTxt = this.add.text(W / 2, 12, '', st).setOrigin(0.5, 0).setDepth(40);
+    this.ammoTxt = this.add.text(16, H - 44, '', st).setDepth(40);
+    this.banner = this.add.text(W / 2, 220, 'Level ' + this.level + ': reach ' + this.target + ' points!', { ...st, fontSize: '36px' }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({ targets: this.banner, alpha: 0, delay: 1800, duration: 600 });
+    this.pauseTxt = this.add.text(W / 2, H / 2, 'PAUSED', { ...st, fontSize: '70px' }).setOrigin(0.5).setDepth(60).setVisible(false);
+
+    this.pauseBtn = btn(this, W - 110, 40, '⏸', () => this.togglePause(), '#455a64', 24);
+    soundBtn(this, W - 50, 40);
+    btn(this, W - 100, H - 40, 'RELOAD', () => this.startReload(), '#ef6c00', 22);
+
